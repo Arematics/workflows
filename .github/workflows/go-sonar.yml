@@ -21,7 +21,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: coverage-file
-          path: ./cleaned-coverage.out
+          path: ./coverage
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v4
@@ -29,5 +29,6 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
+            -Dsonar.language=go
             -Dsonar.coverage.exclusions=**/tests/**,**/*_test.go
-            -Dsonar.go.coverage.reportPaths=cleaned-coverage.out
+            -Dsonar.go.coverage.reportPaths=./coverage/cleaned-coverage.out
