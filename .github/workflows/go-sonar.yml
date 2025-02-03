@@ -1,4 +1,4 @@
-name: Release Workflow
+name: Sonar Workflow
 
 on:
   workflow_call:
@@ -21,7 +21,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: coverage-file
-          path: ./coverage.out
+          path: ./cleaned-coverage.out
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v4
@@ -30,4 +30,4 @@ jobs:
         with:
           args: >
             -Dsonar.coverage.exclusions=**/tests/**,**/*_test.go
-            -Dsonar.go.coverage.reportPaths=coverage.out
+            -Dsonar.go.coverage.reportPaths=cleaned-coverage.out
