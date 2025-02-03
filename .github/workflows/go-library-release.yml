@@ -1,0 +1,106 @@
+name: Release Workflow
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  workflow_call
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for all branches and tags
+
+      - name: Get Current Version and Determine Bump
+        id: versioning
+        run: |
+          # Get the latest tag
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          echo "Latest tag: $latest_tag"
+
+          # Get commit messages since the latest tag
+          if [ -z "$latest_tag" ]; then
+            # No tags exist; get all commits
+            commits_since_last_tag=$(git log --oneline)
+          else
+            # Tags exist; get commits since the latest tag
+            commits_since_last_tag=$(git log $latest_tag..HEAD --oneline)
+          fi
+            
+  
+          # Check for "feat" or "fix" in the commit messages to determine version bump
+          major=0
+          minor=0
+          patch=0
+
+          for commit in "${commits_since_last_tag[@]}"; do
+            if [[ "$commit" == feat:* ]]; then
+              minor=1
+            elif [[ "$commit" == fix:* ]]; then
+              patch=1
+            elif [[ "$commit" == BREAKING\ CHANGE:* ]]; then
+              major=1
+              minor=0
+              patch=0
+            else
+              minor=1
+            fi
+          done
+
+          # Determine the next version (starting from the latest tag)
+          if [ -z "$latest_tag" ]; then
+            new_version="v0.1.0"
+          else
+            # Increment version based on commit types
+            latest_tag=${latest_tag#v} # Remove 'v' prefix if it exists
+            IFS='.' read -r major_version minor_version patch_version <<< "$latest_tag"
+            
+            new_version="v$((major_version + major)).$((minor_version + minor)).$((patch_version + patch))"
+          fi
+
+          echo "New Version: $new_version"
+          echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
+
+      - name: Generate Release Notes
+        id: generate_release_notes
+        run: |
+          echo "## What's Changed" > release_notes.md
+          if [ -z "${{ github.event.inputs.previous_tag }}" ]; then
+            git log --oneline --no-merges --decorate=short > release_notes.md
+          else
+            git log --oneline --no-merges --decorate=short ${{ github.event.inputs.previous_tag }}..HEAD >> release_notes.md
+          fi
+          cat release_notes.md
+
+      - name: Check if tag is prerelease
+        id: check_prerelease
+        run: |
+          if [[ "${{ github.event.inputs.new_tag }}" == *-beta* || "${{ github.event.inputs.new_tag }}" == *-alpha* ]]; then
+            echo "prerelease=true" >> $GITHUB_ENV
+          else
+            echo "prerelease=false" >> $GITHUB_ENV
+          fi
+
+      - name: Tag and Push
+        run: |
+          git tag ${{ env.NEW_VERSION }}
+          git push origin ${{ env.NEW_VERSION }}
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.NEW_VERSION }}
+          release_name: Release ${{ env.NEW_VERSION }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ env.prerelease }}
