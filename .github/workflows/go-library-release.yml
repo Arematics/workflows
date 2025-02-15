@@ -107,6 +107,8 @@ jobs:
       - name: Generate Release Notes
         id: generate_release_notes
         run: |
+          echo "LAST_TAG=${{ env.LAST_TAG }}"
+          git log --oneline --no-merges --decorate=short ${{ env.LAST_TAG }}..HEAD
           echo "## What's Changed" > release_notes.md
           if [ -z "${{ env.LAST_TAG }}" ]; then
             git log --oneline --no-merges --decorate=short > release_notes.md
