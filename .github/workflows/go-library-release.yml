@@ -68,10 +68,14 @@ jobs:
           fi
 
           # Determine the proposed bumped version (without any prerelease suffix)
-          if [ -z "$latest_tag" ]; then
-            bumped_version="v0.1.0"
+          if [ "$bump_major" -eq 1 ]; then
+            bumped_version="v$((major_version + bump_major)).0.0"
+          elif [ "$bump_minor" -eq 1 ]; then
+            bumped_version="v$major_version.$((minor_version + bump_minor)).0"
+          elif [ "$bump_patch" -eq 1 ]; then
+            bumped_version="v$major_version.$minor_version.$((patch_version + bump_patch))"
           else
-            bumped_version="v$((major_version + bump_major)).$((minor_version + bump_minor)).$((patch_version + bump_patch))"
+            bumped_version="v$major_version.$minor_version.$patch_version"
           fi
 
           # Check latest commit message for a prerelease flag (e.g., "-beta" or "-alpha" followed by any characters)
