@@ -1,11 +1,20 @@
-name: Release Workflow
+name: Release Library Workflow
 
 permissions:
   contents: write
   packages: write
 
 on:
-  workflow_call
+  workflow_call:
+    inputs:
+      previous_tag:
+        description: 'Previous Tag (e.g., v1.0.0)'
+        required: false
+        type: string
+      new_tag:
+        description: 'New Tag (e.g., v1.0.1)'
+        required: true
+        type: string
 
 jobs:
   release:
@@ -15,124 +24,40 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch all history for all branches and tags
-          ref: master     # Explicitly checkout master branch
-
-      - name: Get Current Version and Determine Bump
-        id: versioning
-        run: |
-          # Get the latest tag
-          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          echo "LAST_TAG=$latest_tag" >> $GITHUB_ENV
-          
-          echo "Latest tag: $latest_tag"
-
-          # Get commits since the latest tag
-          if [ -z "$latest_tag" ]; then
-            # No tags exist; get all commits
-            commits_since_last_tag=$(git log --oneline)
-          else
-            # Tags exist; get commits since the latest tag
-            commits_since_last_tag=$(git log "$latest_tag"..HEAD --oneline)
-          fi
-
-          # Determine bump based on commit types
-          bump_major=0
-          bump_minor=0
-          bump_patch=0
-          while IFS= read -r commit; do
-            if [[ "$commit" == feat:* ]]; then
-              bump_minor=1
-            elif [[ "$commit" == fix:* ]]; then
-              bump_patch=1
-            elif [[ "$commit" == BREAKING\ CHANGE:* ]]; then
-              bump_major=1
-              bump_minor=0
-              bump_patch=0
-            else
-              bump_minor=1
-            fi
-          done <<< "$commits_since_last_tag"
-
-          # Get the base version parts from the latest tag, if any.
-          if [ -z "$latest_tag" ]; then
-            major_version=0
-            minor_version=0
-            patch_version=0
-          else
-            # Remove leading 'v' if present.
-            latest_version=${latest_tag#v}
-            # In case of prerelease tags, remove the suffix for version bumping.
-            base_version=${latest_version%%-*}
-            IFS='.' read -r major_version minor_version patch_version <<< "$base_version"
-          fi
-
-          # Determine the proposed bumped version (without any prerelease suffix)
-          if [ "$bump_major" -eq 1 ]; then
-            bumped_version="v$((major_version + bump_major)).0.0"
-          elif [ "$bump_minor" -eq 1 ]; then
-            bumped_version="v$major_version.$((minor_version + bump_minor)).0"
-          elif [ "$bump_patch" -eq 1 ]; then
-            bumped_version="v$major_version.$minor_version.$((patch_version + bump_patch))"
-          else
-            bumped_version="v$major_version.$minor_version.$patch_version"
-          fi
-
-          # Check latest commit message for a prerelease flag (e.g., "-beta" or "-alpha" followed by any characters)
-          latest_commit_msg=$(git log -1 --pretty=%B)
-          prerelease_type=""
-          prerelease_suffix=""
-
-          if [[ "$latest_commit_msg" =~ -(alpha|beta)(.*) ]]; then
-            prerelease_type="${BASH_REMATCH[1]}"
-            prerelease_suffix="${BASH_REMATCH[2]}"
-            # Remove any whitespace from the captured suffix
-            prerelease_suffix=$(echo "$prerelease_suffix" | xargs)
-            echo "Found prerelease flag: -${prerelease_type}${prerelease_suffix}"
-          fi
-
-          # If a prerelease flag is found in the latest commit message, adjust the new version.
-          if [ -n "$prerelease_type" ]; then
-            # If the latest tag is already a prerelease of the same type, do not bump the base version.
-            if [[ "$latest_tag" == *-$prerelease_type* ]]; then
-              base_only=${latest_tag%%-*}
-              new_version="${base_only}-$prerelease_type${prerelease_suffix}"
-              echo "Latest tag is already prerelease. Not bumping base version."
-            else
-              new_version="${bumped_version}-$prerelease_type${prerelease_suffix}"
-            fi
-          else
-            new_version="${bumped_version}"
-          fi
-
-          echo "New Version: $new_version"
-          echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
-
+          fetch-depth: 0
+          ref: master
 
       - name: Generate Release Notes
         id: generate_release_notes
         run: |
           echo "## What's Changed" > release_notes.md
-          if [ -z "${{ env.LAST_TAG }}" ]; then
+          if [ -z "${{ inputs.previous_tag }}" ]; then
             git log --oneline --no-merges --decorate=short > release_notes.md
           else
-            git log --oneline --no-merges --decorate=short ${{ env.LAST_TAG }}..HEAD >> release_notes.md
+            git log --oneline --no-merges --decorate=short ${{ inputs.previous_tag }}..HEAD >> release_notes.md
           fi
           cat release_notes.md
 
       - name: Check if tag is prerelease
         id: check_prerelease
         run: |
-          if [[ "${{ env.NEW_VERSION }}" == *-beta* || "${{ env.NEW_VERSION }}" == *-alpha* ]]; then
+          if [[ "${{ inputs.new_tag }}" == *-beta* || "${{ inputs.new_tag }}" == *-alpha* ]]; then
             echo "prerelease=true" >> $GITHUB_ENV
           else
             echo "prerelease=false" >> $GITHUB_ENV
           fi
 
-      - name: Tag and Push
-        run: |
-          git tag ${{ env.NEW_VERSION }}
-          git push origin ${{ env.NEW_VERSION }}
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ inputs.new_tag }}
+          release_name: Release ${{ inputs.new_tag }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ env.prerelease }}
 
       - name: Create GitHub Release
         id: create_release
