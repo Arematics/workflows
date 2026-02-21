@@ -2,6 +2,16 @@ name: Setup Go Workflow
 
 on:
   workflow_call:
+    inputs:
+      app_id:
+        required: true
+        type: string
+      owner:
+        required: true
+        type: string
+    secrets:
+      app_private_key:
+        required: true
 
 jobs:
   setup:
