@@ -2,11 +2,6 @@ name: Setup Go Workflow
 
 on:
   workflow_call:
-    secrets:
-      GH_PRIVATE_REPOSITORY:
-        description: "GitHub token for accessing private repositories"
-        required: true
-
 
 jobs:
   setup:
@@ -23,13 +18,24 @@ jobs:
         with:
           go-version: 1.23.2
 
+      - name: Create GitHub App installation token
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ inputs.app_id }}
+          private-key: ${{ secrets.app_private_key }}
+          owner: ${{ inputs.owner }}
+
       - name: Configure auth for private GitHub modules (.netrc)
         shell: bash
         run: |
-          cat > ~/.netrc <<'EOF'
+          cat > ~/.netrc <<EOF
           machine github.com
             login x-access-token
-            password ${{ secrets.GH_PRIVATE_REPOSITORY }}
+            password ${{ steps.app_token.outputs.token }}
+          machine api.github.com
+            login x-access-token
+            password ${{ steps.app_token.outputs.token }}
           EOF
           chmod 600 ~/.netrc
 
