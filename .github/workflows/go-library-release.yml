@@ -38,6 +38,19 @@ jobs:
           fi
           cat release_notes.md
 
+      # The commit the tag will actually point at, read from the checkout above.
+      #
+      # Without this, actions/create-release tags `github.sha` — the ref the run
+      # was dispatched on, which for a workflow_dispatch is the repository's
+      # DEFAULT branch. In go-service that is `develop`, so `ref: master` two
+      # steps up was decoration: v0.10.0 landed on a merge commit from March and
+      # shipped without the `migration` and `outbox` packages its consumers
+      # import. A release that silently publishes a different tree than the one
+      # it checked out is worse than no release workflow.
+      - name: Resolve the commit being released
+        id: released_commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Check if tag is prerelease
         id: check_prerelease
         run: |
@@ -58,3 +71,4 @@ jobs:
           body_path: release_notes.md
           draft: false
           prerelease: ${{ env.prerelease }}
+          commitish: ${{ steps.released_commit.outputs.sha }}
