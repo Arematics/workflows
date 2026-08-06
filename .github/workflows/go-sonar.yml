@@ -2,6 +2,24 @@ name: Sonar Workflow
 
 on:
   workflow_call:
+    inputs:
+      quality_gate_wait:
+        # Off by default, and that default is the problem this input exists to
+        # make visible rather than to hide.
+        #
+        # Without it the scanner uploads its report and exits 0. The job is then
+        # green whatever the quality gate says — so a gate failing on coverage,
+        # on a new vulnerability, on anything at all, appears nowhere in the
+        # pipeline. Every repo using this workflow was in that state.
+        #
+        # It stays false here so that turning the gate into a blocker is a
+        # deliberate, per-repo decision, taken when that repo's gate actually
+        # passes, instead of one commit in this shared file turning six
+        # pipelines red at once.
+        description: "Fail the job when the SonarQube quality gate fails"
+        type: boolean
+        default: false
+        required: false
     secrets:
       SONAR_TOKEN:
         description: "Sonar token for access to SonarCloud"
@@ -32,3 +50,4 @@ jobs:
             -Dsonar.language=go
             -Dsonar.coverage.exclusions=**/tests/**,**/*_test.go
             -Dsonar.go.coverage.reportPaths=./coverage/cleaned-coverage.out
+            -Dsonar.qualitygate.wait=${{ inputs.quality_gate_wait }}
